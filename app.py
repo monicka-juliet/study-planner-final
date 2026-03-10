@@ -35,8 +35,8 @@ def init_db():
 init_db()
 
 # Email Configuration - UPDATE THESE WITH YOUR GMAIL
-GMAIL_USER = "your-gmail@gmail.com"  # Change this
-GMAIL_PASS = "your-16-digit-app-password"  # Gmail App Password
+GMAIL_USER = "your-gmail@gmail.com"  # Change this to your real Gmail
+GMAIL_PASS = "your-16-digit-app-password"  # Gmail App Password (16 characters)
 
 def send_email(to_email, subject, body):
     try:
@@ -76,39 +76,44 @@ def login():
     error = ""
     if request.method == 'POST':
         action = request.form.get('action', 'login')
-        email = request.form['email'].lower()
-        password = request.form['password']
+        email = request.form['email'].lower().strip()
+        password = request.form['password'].strip()
         
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        if action == 'register':
-            c.execute("SELECT email FROM users WHERE email=?", (email,))
-            if c.fetchone():
-                error = "❌ Email already registered!"
-            else:
-                name = email.split('@')[0].title()
-                hashed_pw = generate_password_hash(password)
-                c.execute("INSERT INTO users (email, password, name) VALUES (?, ?, ?)", 
-                         (email, hashed_pw, name))
-                conn.commit()
-                session['logged_in'] = True
-                session['email'] = email
-                session['name'] = name
+        # Validate email format
+        if '@' not in email or '.' not in email:
+            error = "❌ Please enter a valid email address!"
+        else:
+            conn = get_db_connection()
+            c = conn.cursor()
+            
+            if action == 'register':
+                c.execute("SELECT email FROM users WHERE email=?", (email,))
+                if c.fetchone():
+                    error = "❌ Email already registered!"
+                else:
+                    name = email.split('@')[0].title()
+                    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256:600000')
+                    c.execute("INSERT INTO users (email, password, name) VALUES (?, ?, ?)", 
+                             (email, hashed_pw, name))
+                    conn.commit()
+                    session['logged_in'] = True
+                    session['email'] = email
+                    session['name'] = name
+                    conn.close()
+                    return redirect('/dashboard')
+            
+            elif action == 'login':
+                c.execute("SELECT * FROM users WHERE email=?", (email,))
+                user = c.fetchone()
                 conn.close()
-                return redirect('/dashboard')
-        
-        elif action == 'login':
-            c.execute("SELECT * FROM users WHERE email=?", (email,))
-            user = c.fetchone()
-            conn.close()
-            if user and check_password_hash(user['password'], password):
-                session['logged_in'] = True
-                session['email'] = email
-                session['name'] = user['name']
-                return redirect('/dashboard')
-            else:
-                error = "❌ Wrong email or password!"
+                
+                if user and check_password_hash(user['password'], password):
+                    session['logged_in'] = True
+                    session['email'] = email
+                    session['name'] = user['name']
+                    return redirect('/dashboard')
+                else:
+                    error = "❌ Wrong email or password! Please check and try again."
     
     return render_login_page(error)
     
@@ -129,6 +134,7 @@ def render_login_page(error=""):
             input:focus{{border-color:#667eea;outline:none;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}}
             button{{width:100%;padding:16px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border:none;border-radius:12px;font-size:18px;font-weight:600;cursor:pointer;transition:all 0.3s;margin:5px 0}}
             button:hover{{transform:translateY(-2px);box-shadow:0 10px 25px rgba(102,126,234,0.4)}}
+            button:disabled{{background:#ccc;transform:none;cursor:not-allowed;box-shadow:none}}
             .error{{background:#fee;color:#c53030;padding:12px;border-radius:8px;margin:15px 0;font-weight:500}}
             .demo{{text-align:center;margin-top:25px;font-size:14px;color:#666;padding:15px;background:#f8f9fa;border-radius:8px}}
             h1{{text-align:center;margin-bottom:30px;font-size:32px;color:#333}}
@@ -140,7 +146,6 @@ def render_login_page(error=""):
             <h1>🎓 Study Planner</h1>
             {f'<div class="error">{error}</div>' if error else ''}
             
-            <!-- TABS KEELA VARUM -->
             <div class="tabs-container">
                 <div class="tabs">
                     <div class="tab active" onclick="showTab('login')">🔐 Login</div>
@@ -150,19 +155,19 @@ def render_login_page(error=""):
             
             <form method="POST" id="login-form">
                 <input type="hidden" name="action" value="login">
-                <input type="email" name="email" placeholder="your-email@gmail.com" required>
-                <input type="password" name="password" placeholder="Password" required>
+                <input type="email" name="email" placeholder="your-email@gmail.com" required autocomplete="username">
+                <input type="password" name="password" placeholder="Password" required autocomplete="current-password">
                 <button type="submit">Login</button>
             </form>
             <form method="POST" id="register-form" style="display:none">
                 <input type="hidden" name="action" value="register">
-                <input type="email" name="email" placeholder="your-email@gmail.com" required>
-                <input type="password" name="password" placeholder="Create Password" required>
+                <input type="email" name="email" placeholder="your-email@gmail.com" required autocomplete="email">
+                <input type="password" name="password" placeholder="Create Password (min 6 chars)" required autocomplete="new-password" minlength="6">
                 <button type="submit">Create Account</button>
             </form>
             
             <div class="demo">
-                Demo: test@test.com / 123456
+                <strong>Demo:</strong> test@test.com / 123456
             </div>
         </div>
         <script>
@@ -525,11 +530,17 @@ def view_goals():
     for goal in goals:
         progress_width = min(goal['progress'] * 5, 100)
         goals_html += f'''
-<div style="...">
-  <h3>{goal['subject']} <a href="/delete_goal/{goal['id']}" style="float:right;color:#ff4444;font-size:24px" onclick="return confirm('Delete Goal?')">🗑️</a></h3>
-  Goal: {goal['goal']}...
-</div>
-'''
+        <div style="background:rgba(255,255,255,0.15);padding:30px;margin:20px;border-radius:20px;backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,0.2)">
+          <h3 style="margin-bottom:10px">{goal['subject']} <a href="/delete_goal/{goal['id']}" style="float:right;color:#ff4444;font-size:24px;text-decoration:none" onclick="return confirm('Delete Goal?')">🗑️</a></h3>
+          <p><strong>Goal:</strong> {goal['goal']}</p>
+          <p><strong>Target Score:</strong> {goal['target_score']}</p>
+          <p><strong>Study Hours:</strong> {goal['study_hours']}</p>
+          <div style="background:#333;height:10px;border-radius:5px;margin:15px 0;overflow:hidden">
+            <div style="background:#50c878;width:{progress_width}%;height:100%;transition:width 0.3s"></div>
+          </div>
+          <p>Progress: {goal['progress']}%</p>
+        </div>
+        '''
     
     return f'''
     <!DOCTYPE html>
@@ -572,16 +583,16 @@ def reminders():
         time_left = deadline - now
         if time_left.total_seconds() > 0:
             status = f"⏰ Due in {int(time_left.total_seconds()//3600)}h"
-            status_color = "orange"
+            status_color = "#f39c12"
         else:
             status = "🚨 OVERDUE"
             status_color = "#e74c3c"
         
         reminders_html += f'''
-<div style="background:linear-gradient(135deg,{status_color},#333);padding:25px;margin:20px;border-radius:20px">
-  <h3>{status} <a href="/delete_reminder/{r['id']}" style="float:right;color:#ff4444;font-size:24px" onclick="return confirm('Delete?')">🗑️</a></h3>
-  <p><strong>{r['title']}</strong></p>
-  <p>Deadline: {deadline.strftime('%Y-%m-%d %H:%M')}</p>
+<div style="background:linear-gradient(135deg,{status_color},#333);padding:25px;margin:20px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3)">
+  <h3 style="margin:0">{status} <a href="/delete_reminder/{r['id']}" style="float:right;color:#ff4444;font-size:24px;text-decoration:none" onclick="return confirm('Delete?')">🗑️</a></h3>
+  <p style="margin:10px 0 0 0;font-size:18px"><strong>{r['title']}</strong></p>
+  <p style="margin:5px 0 0 0">Deadline: {deadline.strftime('%Y-%m-%d %H:%M')}</p>
 </div>
 '''
     
@@ -633,19 +644,6 @@ def delete_goal(id):
     conn.commit()
     conn.close()
     return redirect('/view-goals')
-
-@app.route('/delete_file/<int:id>')
-def delete_file(id):
-    if not session.get('logged_in'): return redirect('/')
-    conn = sqlite3.connect('users.db')
-    file = conn.execute('SELECT * FROM files WHERE id=? AND email=?', (id, session['email'])).fetchone()
-    if file:
-        import os
-        os.remove(f'static/uploads/{file[2]}/{file[3]}')
-    conn.execute('DELETE FROM files WHERE id=?', (id,))
-    conn.commit()
-    conn.close()
-    return redirect(request.referrer or '/dashboard')
 
 @app.route('/logout')
 def logout():
