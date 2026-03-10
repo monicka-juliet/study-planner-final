@@ -37,7 +37,7 @@ init_db()
 
 # Email Configuration - UPDATE THESE WITH YOUR GMAIL
 GMAIL_USER = "your-gmail@gmail.com"  # Change this to your Gmail
-GMAIL_PASS = "your-16-digit-app-password"  # Gmail App Password (not regular password)
+GMAIL_PASS = "your-16-digit-app-password"
 
 def is_valid_email(email):
     """Validate Gmail format"""
@@ -312,3 +312,4 @@ def logout():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
