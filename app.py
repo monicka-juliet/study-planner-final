@@ -86,6 +86,24 @@ h1{{text-align:center;margin-bottom:30px;font-size:32px;color:#333}}
 .tabs-container{{margin:25px 0}}  
 </style>  
 </head>  
+<script>
+const password = document.getElementById("password");
+const eye = document.getElementById("toggleEye");
+const eyeSlash = document.getElementById("eyeSlash");
+const eyeOpen = document.getElementById("eyeOpen");
+
+eye.addEventListener("mouseenter", function() {
+    password.type = "text";
+    eyeSlash.style.display = "none";
+    eyeOpen.style.display = "block";
+});
+
+eye.addEventListener("mouseleave", function() {
+    password.type = "password";
+    eyeSlash.style.display = "block";
+    eyeOpen.style.display = "none";
+});
+</script>
 <body>  
 <div class="login-box">  
 <h1>🎓 Study Planner</h1>  
@@ -663,3 +681,4 @@ def logout():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
